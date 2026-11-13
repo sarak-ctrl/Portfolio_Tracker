@@ -12,7 +12,7 @@ header{text-align:center;padding:50px 20px 30px;border-bottom:3px solid #000}
 h1{font-size:56px;text-transform:uppercase;letter-spacing:-1px;outline:none}
 .sub{margin-top:10px;font-size:14px;letter-spacing:3px;text-transform:uppercase;color:#555;outline:none}
 main{max-width:900px;margin:0 auto;padding:40px 20px 80px}
-.bar{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+.bar{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center}
 .bar input{flex:1;min-width:200px}
 input,textarea{font:inherit;border:2px solid #000;padding:12px;width:100%;background:#fff}
 button,.btn{font:inherit;font-size:14px;background:#000;color:#fff;border:2px solid #000;padding:12px 22px;text-transform:uppercase;letter-spacing:2px;cursor:pointer;text-decoration:none}
@@ -20,7 +20,7 @@ button:hover,.btn:hover{background:#fff;color:#000}
 .ghost{background:#fff;color:#000}
 .ghost:hover{background:#000;color:#fff}
 section{margin-top:50px}
-.head{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #000;padding-bottom:10px}
+.head{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #000;padding-bottom:10px;gap:10px;flex-wrap:wrap}
 .head h2{font-size:32px;text-transform:uppercase}
 .head div{display:flex;gap:8px}
 .item{border:2px solid #000;border-top:none;padding:20px;display:flex;justify-content:space-between;gap:20px}
@@ -28,10 +28,12 @@ section{margin-top:50px}
 .item h3{font-size:20px}
 .item a{color:#000}
 .meta{font-size:13px;color:#555;margin-top:6px;text-transform:uppercase;letter-spacing:1px}
-.item p{font-weight:normal;line-height:1.5;margin-top:10px}
-.x{background:none;color:#000;border:none;padding:0;font-size:22px;align-self:flex-start}
+.item p{font-weight:normal;line-height:1.5;margin-top:10px;white-space:pre-wrap}
+.acts{display:flex;gap:14px;align-self:flex-start}
+.x{background:none;color:#000;border:none;padding:0;font-size:22px}
 .x:hover{background:none;color:red}
 form.add{border:2px solid #000;border-top:none;padding:20px;display:grid;gap:10px}
+form.add div{display:flex;gap:10px}
 .empty{border:2px solid #000;border-top:none;padding:20px;color:#888}
 </style>
 </head>
@@ -49,15 +51,50 @@ form.add{border:2px solid #000;border-top:none;padding:20px;display:grid;gap:10p
 <input id="gh" placeholder="GitHub username">
 <button class="ghost" onclick="loadGit()">Load GitHub</button>
 </div>
+<div class="bar">
+<button class="ghost" onclick="connect()">Connect Storage</button>
+<span id="status" class="meta"></span>
+</div>
 <div id="list"></div>
 <div id="git"></div>
 </main>
 <script>
-const KEY='just-a-list';
-let S=JSON.parse(localStorage.getItem(KEY))||{name:'Your Name',tagline:'Experience & Certifications',github:'',sections:[{title:'Experience',items:[]},{title:'Certifications',items:[]}]};
-const save=()=>localStorage.setItem(KEY,JSON.stringify(S));
+const KEY='just-a-list',REPO='sarak-ctrl/Portfolio_Tracker',FILE='data.json';
+const DEF={name:'Your Name',tagline:'Experience & Certifications',github:'',updated:0,sections:[{title:'Experience',items:[]},{title:'Certifications',items:[]}]};
+let S,ED=null,timer;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const token=()=>localStorage.getItem(KEY+'-token');
+const status=t=>$('#status').textContent=t;
+
+function save(){
+S.updated=Date.now();
+localStorage.setItem(KEY,JSON.stringify(S));
+clearTimeout(timer);
+timer=setTimeout(sync,1500);
+}
+
+async function sync(){
+const t=token();
+if(!t)return status('Not connected — saved in this browser only');
+status('Saving...');
+const url=`https://api.github.com/repos/${REPO}/contents/${FILE}`;
+const h={Authorization:'Bearer '+t,Accept:'application/vnd.github+json'};
+try{
+const g=await fetch(url,{headers:h,cache:'no-store'});
+const sha=g.ok?(await g.json()).sha:undefined;
+const r=await fetch(url,{method:'PUT',headers:h,body:JSON.stringify({message:'Update data',content:btoa(unescape(encodeURIComponent(JSON.stringify(S,null,2)))),sha})});
+if(!r.ok)throw 0;
+status('Saved to GitHub ✓');
+}catch{status('Save failed — check your token')}
+}
+
+function connect(){
+const t=prompt('Paste your GitHub token (leave empty to disconnect):',token()||'');
+if(t===null)return;
+t.trim()?localStorage.setItem(KEY+'-token',t.trim()):localStorage.removeItem(KEY+'-token');
+sync();
+}
 
 function render(){
 $('#name').textContent=S.name;
@@ -65,35 +102,49 @@ $('#tagline').textContent=S.tagline;
 $('#gh').value=S.github;
 $('#list').innerHTML=S.sections.map((s,i)=>`
 <section>
-<div class="head"><h2>${esc(s.title)}</h2><div><button onclick="toggle(${i})">+ Add</button><button class="ghost" onclick="delSection(${i})">Delete</button></div></div>
-<form class="add" id="f${i}" hidden onsubmit="addItem(event,${i})">
+<div class="head"><h2>${esc(s.title)}</h2><div><button onclick="toggle(${i})">+ Add</button><button class="ghost" onclick="renameSection(${i})">Rename</button><button class="ghost" onclick="delSection(${i})">Delete</button></div></div>
+<form class="add" id="f${i}" hidden onsubmit="saveItem(event,${i})">
 <input name="title" placeholder="Title / Role / Certificate" required>
 <input name="org" placeholder="Company / Issuer">
 <input name="date" placeholder="Date (e.g. Jan 2024 – Present)">
 <input name="link" placeholder="Link (optional)">
-<textarea name="desc" rows="3" placeholder="Description"></textarea>
-<button>Save</button>
+<textarea name="desc" rows="4" placeholder="Description"></textarea>
+<div><button>Save</button><button type="button" class="ghost" onclick="toggle(${i})">Cancel</button></div>
 </form>
 ${s.items.length?s.items.map((it,j)=>`
 <div class="item"><div>
 <h3>${it.link?`<a href="${esc(it.link)}" target="_blank">${esc(it.title)}</a>`:esc(it.title)}</h3>
 <div class="meta">${esc([it.org,it.date].filter(Boolean).join(' · '))}</div>
 ${it.desc?`<p>${esc(it.desc)}</p>`:''}
-</div><button class="x" onclick="delItem(${i},${j})">×</button></div>`).join(''):'<div class="empty">Nothing here yet.</div>'}
+</div><div class="acts"><button class="x" onclick="edit(${i},${j})">✎</button><button class="x" onclick="delItem(${i},${j})">×</button></div></div>`).join(''):'<div class="empty">Nothing here yet.</div>'}
 </section>`).join('');
 }
 
-function toggle(i){const f=$('#f'+i);f.hidden=!f.hidden}
-function addItem(e,i){e.preventDefault();S.sections[i].items.unshift(Object.fromEntries(new FormData(e.target)));save();render()}
+function toggle(i){const f=$('#f'+i);ED=null;f.reset();f.hidden=!f.hidden}
+function edit(i,j){
+const f=$('#f'+i),it=S.sections[i].items[j];
+ED={i,j};f.reset();
+for(const k in it)if(f.elements[k])f.elements[k].value=it[k];
+f.hidden=false;
+f.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function saveItem(e,i){
+e.preventDefault();
+const it=Object.fromEntries(new FormData(e.target));
+ED&&ED.i===i?S.sections[i].items[ED.j]=it:S.sections[i].items.unshift(it);
+ED=null;save();render();
+}
 function delItem(i,j){if(confirm('Delete this entry?')){S.sections[i].items.splice(j,1);save();render()}}
-function delSection(i){if(confirm('Delete this section?')){S.sections.splice(i,1);save();render()}}
+function renameSection(i){const t=prompt('Section name:',S.sections[i].title);if(t&&t.trim()){S.sections[i].title=t.trim();save();render()}}
+function delSection(i){if(confirm('Delete this section and everything in it?')){S.sections.splice(i,1);save();render()}}
 function addSection(){const t=$('#sec').value.trim();if(!t)return;S.sections.push({title:t,items:[]});$('#sec').value='';save();render()}
 
 $('#name').onblur=e=>{S.name=e.target.textContent.trim()||'Your Name';save()};
 $('#tagline').onblur=e=>{S.tagline=e.target.textContent.trim();save()};
 
 async function loadGit(){
-const u=$('#gh').value.trim();S.github=u;save();
+const u=$('#gh').value.trim();
+if(u!==S.github){S.github=u;save()}
 if(!u){$('#git').innerHTML='';return}
 $('#git').innerHTML=`<section><div class="head"><h2>GitHub</h2><div><a class="btn ghost" href="https://github.com/${esc(u)}" target="_blank">Profile</a></div></div><div id="repos"><div class="empty">Loading...</div></div></section>`;
 try{
@@ -109,8 +160,16 @@ ${x.description?`<p>${esc(x.description)}</p>`:''}
 }catch{$('#repos').innerHTML='<div class="empty">Could not load this GitHub user.</div>'}
 }
 
+async function init(){
+let remote=null;
+try{const r=await fetch(FILE+'?'+Date.now());if(r.ok)remote=await r.json()}catch{}
+const local=JSON.parse(localStorage.getItem(KEY)||'null');
+S=local&&(!remote||(local.updated||0)>=(remote.updated||0))?local:(remote||structuredClone(DEF));
 render();
+status(token()?'Connected to GitHub':'Not connected — saved in this browser only');
 if(S.github)loadGit();
+}
+init();
 </script>
 </body>
 </html>
