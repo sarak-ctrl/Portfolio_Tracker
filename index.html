@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portfolio Tracker</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+body{font-family:Arial,Helvetica,sans-serif;font-weight:bold;background:#fff;color:#000}
+header{text-align:center;padding:50px 20px 30px;border-bottom:3px solid #000}
+h1{font-size:56px;text-transform:uppercase;letter-spacing:-1px;outline:none}
+.sub{margin-top:10px;font-size:14px;letter-spacing:3px;text-transform:uppercase;color:#555;outline:none}
+main{max-width:900px;margin:0 auto;padding:40px 20px 80px}
+.bar{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+.bar input{flex:1;min-width:200px}
+input,textarea{font:inherit;border:2px solid #000;padding:12px;width:100%;background:#fff}
+button,.btn{font:inherit;font-size:14px;background:#000;color:#fff;border:2px solid #000;padding:12px 22px;text-transform:uppercase;letter-spacing:2px;cursor:pointer;text-decoration:none}
+button:hover,.btn:hover{background:#fff;color:#000}
+.ghost{background:#fff;color:#000}
+.ghost:hover{background:#000;color:#fff}
+section{margin-top:50px}
+.head{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #000;padding-bottom:10px}
+.head h2{font-size:32px;text-transform:uppercase}
+.head div{display:flex;gap:8px}
+.item{border:2px solid #000;border-top:none;padding:20px;display:flex;justify-content:space-between;gap:20px}
+.item:hover{background:#f2f2f2}
+.item h3{font-size:20px}
+.item a{color:#000}
+.meta{font-size:13px;color:#555;margin-top:6px;text-transform:uppercase;letter-spacing:1px}
+.item p{font-weight:normal;line-height:1.5;margin-top:10px}
+.x{background:none;color:#000;border:none;padding:0;font-size:22px;align-self:flex-start}
+.x:hover{background:none;color:red}
+form.add{border:2px solid #000;border-top:none;padding:20px;display:grid;gap:10px}
+.empty{border:2px solid #000;border-top:none;padding:20px;color:#888}
+</style>
+</head>
+<body>
+<header>
+<h1 id="name" contenteditable></h1>
+<div class="sub" id="tagline" contenteditable></div>
+</header>
+<main>
+<div class="bar">
+<input id="sec" placeholder="New section name (e.g. Education, Awards)">
+<button onclick="addSection()">+ Add Section</button>
+</div>
+<div class="bar">
+<input id="gh" placeholder="GitHub username">
+<button class="ghost" onclick="loadGit()">Load GitHub</button>
+</div>
+<div id="list"></div>
+<div id="git"></div>
+</main>
+<script>
+const KEY='just-a-list';
+let S=JSON.parse(localStorage.getItem(KEY))||{name:'Your Name',tagline:'Experience & Certifications',github:'',sections:[{title:'Experience',items:[]},{title:'Certifications',items:[]}]};
+const save=()=>localStorage.setItem(KEY,JSON.stringify(S));
+const $=s=>document.querySelector(s);
+const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function render(){
+$('#name').textContent=S.name;
+$('#tagline').textContent=S.tagline;
+$('#gh').value=S.github;
+$('#list').innerHTML=S.sections.map((s,i)=>`
+<section>
+<div class="head"><h2>${esc(s.title)}</h2><div><button onclick="toggle(${i})">+ Add</button><button class="ghost" onclick="delSection(${i})">Delete</button></div></div>
+<form class="add" id="f${i}" hidden onsubmit="addItem(event,${i})">
+<input name="title" placeholder="Title / Role / Certificate" required>
+<input name="org" placeholder="Company / Issuer">
+<input name="date" placeholder="Date (e.g. Jan 2024 – Present)">
+<input name="link" placeholder="Link (optional)">
+<textarea name="desc" rows="3" placeholder="Description"></textarea>
+<button>Save</button>
+</form>
+${s.items.length?s.items.map((it,j)=>`
+<div class="item"><div>
+<h3>${it.link?`<a href="${esc(it.link)}" target="_blank">${esc(it.title)}</a>`:esc(it.title)}</h3>
+<div class="meta">${esc([it.org,it.date].filter(Boolean).join(' · '))}</div>
+${it.desc?`<p>${esc(it.desc)}</p>`:''}
+</div><button class="x" onclick="delItem(${i},${j})">×</button></div>`).join(''):'<div class="empty">Nothing here yet.</div>'}
+</section>`).join('');
+}
+
+function toggle(i){const f=$('#f'+i);f.hidden=!f.hidden}
+function addItem(e,i){e.preventDefault();S.sections[i].items.unshift(Object.fromEntries(new FormData(e.target)));save();render()}
+function delItem(i,j){if(confirm('Delete this entry?')){S.sections[i].items.splice(j,1);save();render()}}
+function delSection(i){if(confirm('Delete this section?')){S.sections.splice(i,1);save();render()}}
+function addSection(){const t=$('#sec').value.trim();if(!t)return;S.sections.push({title:t,items:[]});$('#sec').value='';save();render()}
+
+$('#name').onblur=e=>{S.name=e.target.textContent.trim()||'Your Name';save()};
+$('#tagline').onblur=e=>{S.tagline=e.target.textContent.trim();save()};
+
+async function loadGit(){
+const u=$('#gh').value.trim();S.github=u;save();
+if(!u){$('#git').innerHTML='';return}
+$('#git').innerHTML=`<section><div class="head"><h2>GitHub</h2><div><a class="btn ghost" href="https://github.com/${esc(u)}" target="_blank">Profile</a></div></div><div id="repos"><div class="empty">Loading...</div></div></section>`;
+try{
+const r=await fetch(`https://api.github.com/users/${encodeURIComponent(u)}/repos?sort=updated&per_page=100`);
+if(!r.ok)throw 0;
+const d=await r.json();
+$('#repos').innerHTML=d.length?d.map(x=>`
+<div class="item"><div>
+<h3><a href="${x.html_url}" target="_blank">${esc(x.name)}</a></h3>
+<div class="meta">${esc([x.language,'★ '+x.stargazers_count,'Updated '+new Date(x.updated_at).toLocaleDateString()].filter(Boolean).join(' · '))}</div>
+${x.description?`<p>${esc(x.description)}</p>`:''}
+</div></div>`).join(''):'<div class="empty">No public repositories.</div>';
+}catch{$('#repos').innerHTML='<div class="empty">Could not load this GitHub user.</div>'}
+}
+
+render();
+if(S.github)loadGit();
+</script>
+</body>
+</html>
