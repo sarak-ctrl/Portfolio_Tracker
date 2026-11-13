@@ -19,6 +19,7 @@ button,.btn{font:inherit;font-size:14px;background:#000;color:#fff;border:2px so
 button:hover,.btn:hover{background:#fff;color:#000}
 .ghost{background:#fff;color:#000}
 .ghost:hover{background:#000;color:#fff}
+.sm{padding:6px 12px;font-size:12px}
 section{margin-top:50px}
 .head{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #000;padding-bottom:10px;gap:10px;flex-wrap:wrap}
 .head h2{font-size:32px;text-transform:uppercase}
@@ -29,9 +30,7 @@ section{margin-top:50px}
 .item a{color:#000}
 .meta{font-size:13px;color:#555;margin-top:6px;text-transform:uppercase;letter-spacing:1px}
 .item p{font-weight:normal;line-height:1.5;margin-top:10px;white-space:pre-wrap}
-.acts{display:flex;gap:14px;align-self:flex-start}
-.x{background:none;color:#000;border:none;padding:0;font-size:22px}
-.x:hover{background:none;color:red}
+.acts{display:flex;gap:8px;align-self:flex-start}
 form.add{border:2px solid #000;border-top:none;padding:20px;display:grid;gap:10px}
 form.add div{display:flex;gap:10px}
 .empty{border:2px solid #000;border-top:none;padding:20px;color:#888}
@@ -65,7 +64,7 @@ let S,ED=null,timer;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const token=()=>localStorage.getItem(KEY+'-token');
-const status=t=>$('#status').textContent=t;
+const setStatus=t=>$('#status').textContent=t;
 
 function save(){
 S.updated=Date.now();
@@ -76,8 +75,8 @@ timer=setTimeout(sync,1500);
 
 async function sync(){
 const t=token();
-if(!t)return status('Not connected — saved in this browser only');
-status('Saving...');
+if(!t)return setStatus('Not connected — saved in this browser only');
+setStatus('Saving...');
 const url=`https://api.github.com/repos/${REPO}/contents/${FILE}`;
 const h={Authorization:'Bearer '+t,Accept:'application/vnd.github+json'};
 try{
@@ -85,8 +84,8 @@ const g=await fetch(url,{headers:h,cache:'no-store'});
 const sha=g.ok?(await g.json()).sha:undefined;
 const r=await fetch(url,{method:'PUT',headers:h,body:JSON.stringify({message:'Update data',content:btoa(unescape(encodeURIComponent(JSON.stringify(S,null,2)))),sha})});
 if(!r.ok)throw 0;
-status('Saved to GitHub ✓');
-}catch{status('Save failed — check your token')}
+setStatus('Saved to GitHub ✓');
+}catch{setStatus('Save failed — check your token')}
 }
 
 function connect(){
@@ -102,36 +101,39 @@ $('#tagline').textContent=S.tagline;
 $('#gh').value=S.github;
 $('#list').innerHTML=S.sections.map((s,i)=>`
 <section>
-<div class="head"><h2>${esc(s.title)}</h2><div><button onclick="toggle(${i})">+ Add</button><button class="ghost" onclick="renameSection(${i})">Rename</button><button class="ghost" onclick="delSection(${i})">Delete</button></div></div>
+<div class="head"><h2>${esc(s.title)}</h2><div><button onclick="openForm(${i})">+ Add</button><button class="ghost" onclick="renameSection(${i})">Rename</button><button class="ghost" onclick="delSection(${i})">Delete</button></div></div>
 <form class="add" id="f${i}" hidden onsubmit="saveItem(event,${i})">
 <input name="title" placeholder="Title / Role / Certificate" required>
 <input name="org" placeholder="Company / Issuer">
 <input name="date" placeholder="Date (e.g. Jan 2024 – Present)">
 <input name="link" placeholder="Link (optional)">
 <textarea name="desc" rows="4" placeholder="Description"></textarea>
-<div><button>Save</button><button type="button" class="ghost" onclick="toggle(${i})">Cancel</button></div>
+<div><button type="submit">Save</button><button type="button" class="ghost" onclick="closeForm(${i})">Cancel</button></div>
 </form>
 ${s.items.length?s.items.map((it,j)=>`
 <div class="item"><div>
 <h3>${it.link?`<a href="${esc(it.link)}" target="_blank">${esc(it.title)}</a>`:esc(it.title)}</h3>
 <div class="meta">${esc([it.org,it.date].filter(Boolean).join(' · '))}</div>
 ${it.desc?`<p>${esc(it.desc)}</p>`:''}
-</div><div class="acts"><button class="x" onclick="edit(${i},${j})">✎</button><button class="x" onclick="delItem(${i},${j})">×</button></div></div>`).join(''):'<div class="empty">Nothing here yet.</div>'}
+</div><div class="acts"><button class="ghost sm" onclick="editItem(${i},${j})">Edit</button><button class="ghost sm" onclick="delItem(${i},${j})">Delete</button></div></div>`).join(''):'<div class="empty">Nothing here yet.</div>'}
 </section>`).join('');
 }
 
-function toggle(i){const f=$('#f'+i);ED=null;f.reset();f.hidden=!f.hidden}
-function edit(i,j){
+function openForm(i){const f=$('#f'+i);ED=null;f.reset();f.hidden=false;f.elements.title.focus()}
+function closeForm(i){const f=$('#f'+i);ED=null;f.reset();f.hidden=true}
+function editItem(i,j){
 const f=$('#f'+i),it=S.sections[i].items[j];
 ED={i,j};f.reset();
-for(const k in it)if(f.elements[k])f.elements[k].value=it[k];
+['title','org','date','link','desc'].forEach(k=>f.elements[k].value=it[k]||'');
 f.hidden=false;
 f.scrollIntoView({behavior:'smooth',block:'center'});
+f.elements.desc.focus();
 }
 function saveItem(e,i){
 e.preventDefault();
 const it=Object.fromEntries(new FormData(e.target));
-ED&&ED.i===i?S.sections[i].items[ED.j]=it:S.sections[i].items.unshift(it);
+if(ED&&ED.i===i)S.sections[i].items[ED.j]=it;
+else S.sections[i].items.unshift(it);
 ED=null;save();render();
 }
 function delItem(i,j){if(confirm('Delete this entry?')){S.sections[i].items.splice(j,1);save();render()}}
@@ -166,7 +168,7 @@ try{const r=await fetch(FILE+'?'+Date.now());if(r.ok)remote=await r.json()}catch
 const local=JSON.parse(localStorage.getItem(KEY)||'null');
 S=local&&(!remote||(local.updated||0)>=(remote.updated||0))?local:(remote||structuredClone(DEF));
 render();
-status(token()?'Connected to GitHub':'Not connected — saved in this browser only');
+setStatus(token()?'Connected to GitHub':'Not connected — saved in this browser only');
 if(S.github)loadGit();
 }
 init();
